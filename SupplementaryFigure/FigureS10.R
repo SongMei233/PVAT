@@ -69,43 +69,6 @@ DimPlot(total_T,label = T,group.by = "cluster_name_slim")
 
 qsave(total_T,file = "total_T_mergePublic.qs")
 
-#harmony
-
-DefaultAssay(total_T) <- "RNA"
-
-total_T <- NormalizeData(total_T)
-total_T <- FindVariableFeatures(total_T,selection.method = "vst", nfeatures = 1000)
-total_T <- ScaleData(total_T)
-total_T <- RunPCA(total_T, verbose = FALSE)
-
-total_T@meta.data$sample <- as.factor(total_T@meta.data$sample)
-total_T <- RunHarmony(total_T,group.by.vars="sample",plot_convergence = TRUE)
-ElbowPlot(total_T,ndims = 50)
-total_T <- RunUMAP(total_T,reduction = "harmony", dims = 1:30)
-total_T <- FindNeighbors(total_T,reduction = "harmony", dims = 1:30)
-total_T <- FindClusters(total_T, resolution = 0.5)
-
-DimPlot(total_T, reduction = "umap", label=T,group.by = "RNA_snn_res.0.5")
-DimPlot(total_T,label = T,group.by = "cluster_name_slim")
-
-#FastMNN
-library(SeuratWrappers)
-
-for(i in 1:length(data.list)){
-  DefaultAssay(data.list[[i]]) <- "RNA"
-  data.list[[i]][["SCT"]] <- NULL
-  data.list[[i]] <- NormalizeData(data.list[[i]])
-  data.list[[i]] <- FindVariableFeatures(data.list[[i]])
-}
-
-total_T <- RunFastMNN(object.list = data.list)
-total_T <- RunUMAP(total_T, reduction = "mnn", dims = 1:30)
-total_T <- FindNeighbors(total_T, reduction = "mnn", dims = 1:30) 
-total_T <- FindClusters(total_T,resolution = 0.5)
-
-DimPlot(total_T, reduction = "umap", label=T,group.by = "RNA_snn_res.0.5")
-DimPlot(total_T,label = T,group.by = "cluster_name_slim")
-
 clu13.marker <- FindMarkers(total_T, ident.1 = "13", logfc.threshold = 0.2, min.pct = 0.5, min.diff.pct = 0.2,only.pos = T)
 
 Plot_Density_Custom(total_T,features = c("PDCD1","HSPA1A"))
@@ -234,25 +197,6 @@ Idents(total_Myeloid) <- "integrated_snn_res.0.5"
 DefaultAssay(total_Myeloid) <- "SCT"
 DotPlot(total_Myeloid, features = markers)  + theme(axis.text=element_text(size=12), axis.title=element_text(size=12,face="bold")) + RotatedAxis()
 
-#FastMNN
-library(SeuratWrappers)
-
-count <- total_Myeloid@assays$RNA@counts
-meta <- total_Myeloid@meta.data
-total_Myeloid <- CreateSeuratObject(counts = count,meta.data = meta)
-
-data.list <- SplitObject(total_Myeloid,split.by = "sample")
-
-for(i in 1:length(data.list)){
-  DefaultAssay(data.list[[i]]) <- "RNA"
-  data.list[[i]] <- NormalizeData(data.list[[i]])
-  data.list[[i]] <- FindVariableFeatures(data.list[[i]])
-}
-
-total_Myeloid <- RunFastMNN(object.list = data.list)
-total_Myeloid <- RunUMAP(total_Myeloid, reduction = "mnn", dims = 1:30)
-total_Myeloid <- FindNeighbors(total_Myeloid, reduction = "mnn", dims = 1:30) 
-total_Myeloid <- FindClusters(total_Myeloid,resolution = 0.5)
 
 DimPlot(total_Myeloid, reduction = "umap", label=T,group.by = "RNA_snn_res.0.5")
 DimPlot(total_Myeloid,label = T,group.by = "cluster_name_slim")
@@ -375,28 +319,6 @@ DimPlot(total_B,label = T,group.by = "cluster_name_slim")
 
 qsave(total_B,file = "total_B_mergePublic.qs")
 
-#FastMNN
-library(SeuratWrappers)
-
-count <- total_B@assays$RNA@counts
-meta <- total_B@meta.data
-total_B <- CreateSeuratObject(counts = count,meta.data = meta)
-
-data.list <- SplitObject(total_B,split.by = "sample")
-
-for(i in 1:length(data.list)){
-  DefaultAssay(data.list[[i]]) <- "RNA"
-  data.list[[i]] <- NormalizeData(data.list[[i]])
-  data.list[[i]] <- FindVariableFeatures(data.list[[i]])
-}
-
-total_B <- RunFastMNN(object.list = data.list)
-total_B <- RunUMAP(total_B, reduction = "mnn", dims = 1:30)
-total_B <- FindNeighbors(total_B, reduction = "mnn", dims = 1:30) 
-total_B <- FindClusters(total_B,resolution = 0.5)
-
-DimPlot(total_B, reduction = "umap", label=T,group.by = "RNA_snn_res.0.5")
-DimPlot(total_B,label = T,group.by = "cluster_name_slim")
 
 total_B$cluster_name_slim <- "B_naive"
 total_B$cluster_name_slim[total_B$RNA_snn_res.0.5 %in% c(3,4,5,8)] <- "B_memory(unswitched)"
@@ -467,16 +389,18 @@ keep_elements <- sapply(data.list, function(x) {
 
 data.list <- data.list[keep_elements]
 
-for(i in 1:length(data.list)){
-  DefaultAssay(data.list[[i]]) <- "RNA"
-  data.list[[i]] <- NormalizeData(data.list[[i]])
-  data.list[[i]] <- FindVariableFeatures(data.list[[i]])
-}
+options(future.globals.maxSize= 100000000000000)
 
-total_NK <- RunFastMNN(object.list = data.list)
-total_NK <- RunUMAP(total_NK, reduction = "mnn", dims = 1:30)
-total_NK <- FindNeighbors(total_NK, reduction = "mnn", dims = 1:30) 
-total_NK <- FindClusters(total_NK,resolution = 0.5)
+data.features <- SelectIntegrationFeatures(object.list = data.list)
+data.list <- PrepSCTIntegration(object.list = data.list,assay = "SCT", anchor.features = data.features,verbose = FALSE)
+data.anchors <- FindIntegrationAnchors(object.list = data.list, normalization.method = "SCT", anchor.features = data.features,k.filter = 40, verbose = FALSE)
+total_NK <- IntegrateData(anchorset = data.anchors, normalization.method = "SCT",k.weight = 40, verbose = FALSE)
+
+total_NK <- Reduct(total_NK)
+
+Idents(total_NK) <- "integrated_snn_res.0.5"
+DimPlot(total_NK,label = T)
+DimPlot(total_NK,label = T,group.by = "cluster_name_slim")
 
 DimPlot(total_NK, reduction = "umap", label=T,group.by = "RNA_snn_res.0.5")
 DimPlot(total_NK,label = T,group.by = "cluster_name_slim")
